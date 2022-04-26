@@ -1,0 +1,498 @@
+---
+title: "MiniProject_20235"
+author: "P.Neeraj Vardhan"
+date: "13/03/2021"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Importing libraries
+```{r}
+library(tidyverse)
+library(MASS)
+library(caret)
+library(car)
+library(ggcorrplot)
+library(lattice)
+```
+
+Importing dataset
+```{r}
+Health_data <- read.csv("heart.csv")
+head(Health_data)
+```
+
+Basic statistics on the dataset
+```{r}
+list(summary(Health_data))
+
+```
+
+```{r}
+corr = round(cor(Health_data),1)
+ggcorrplot(corr,lab = TRUE)
+```
+
+EDA
+```{r}
+hist(Health_data$thalach) #this is a histogram for the maximum heart rate achieved
+```
+
+```{r}
+hist(Health_data$age) #histogram for the age
+```
+
+
+
+
+```{r}
+ggplot(data = Health_data,
+       mapping = aes(x=trestbps,
+                     y=age,
+                     color=target))+
+  geom_point()
+```
+I thought we might find some interesting relation between the age and blood pressure and I think that people having a higher blood pressure ie 120<bp<150 are being diseased.
+
+
+```{r}
+ggplot(data = Health_data,
+       mapping = aes(x=chol,
+                     y=age,
+                     color=target))+
+  geom_point()
+```
+From this we can say that cholestoral greater than 200 and less than 300 are more affected.
+
+
+```{r}
+ggplot(data = Health_data,
+       mapping = aes(x=sex,
+                     y=age,
+                     color=target))+
+  geom_point()
+```
+From this I  can say that more females than males are having the disease and that to middle aged women. 
+
+
+```{r}
+ggplot(data = Health_data,
+       mapping = aes(x=target,
+                     y=age,
+                     color=target))+
+  geom_point()
+```
+From this no conclusive result can be concluded.
+
+
+```{r}
+boxplot(age~target,data = Health_data,main="Age Vs Target",ylab = "Age",xlab="Target")
+```
+From this we can say that people with age between 45 and 55 are more effected.
+
+
+
+```{r}
+boxplot(thalach~target,data = Health_data,main="Heart Rate Vs Target",ylab = "Heart Rate",xlab="Target")
+
+```
+From this we can say that people with higher heart rate are more susceptible.
+
+
+```{r}
+ggplot(Health_data)+
+  aes(age,thalach,color=target)+
+  geom_jitter(na.rm = TRUE)+ # color, shape 
+  theme(legend.position="right")+
+  labs(title="Age vs Heart Rate")
+```
+From this also we can say that middle aged people and people with higher heart rate are more susceptible.
+
+```{r}
+ggplot(Health_data)+
+  aes(thalach,age)+
+  geom_boxplot(na.rm = TRUE)+ # color, shape 
+  theme(legend.position="right")+
+  labs(title="Age vs Heart Rate")
+```
+
+
+
+
+
+Linear Regression
+
+```{r}
+#view(Health_data)
+model1 = lm(thalach ~ .,data = Health_data)
+summary(model1)
+```
+
+```{r}
+step_model <- stepAIC(model1,direction = "backward",trace = "TRUE")
+summary(step_model)
+```
+
+```{r}
+M1 = lm(thalach ~ age + cp + trestbps + chol + exang + slope + thal + target,data = Health_data)
+summary(M1)
+```
+
+
+```{r}
+M2 = lm(thalach ~ age + cp + trestbps + chol + exang + oldpeak + slope + thal + target,data = Health_data)
+summary(M2)
+```
+
+```{r}
+FinalModel = lm(thalach ~ age + cp + trestbps + chol + exang + slope +target, data = Health_data)
+summary(FinalModel)
+par(mfrow=c(2,2),mar=c(4,4,2,0.5))
+plot(FinalModel)
+```
+
+```{r}
+library(broom)
+
+summary_stats <- tbl_df(bind_rows(glance(M1) %>% dplyr::select(adj.r.squared,sigma,AIC,BIC),glance(M2) %>% dplyr::select(adj.r.squared,sigma,AIC,BIC),glance(FinalModel) %>% dplyr::select(adj.r.squared,sigma,AIC,BIC)))
+summary_stats
+```
+
+
+
+
+```{r}
+bc <- boxcox(thalach ~ age + cp + trestbps + chol + exang + slope + target,data=Health_data) #applying boxcox test
+```
+
+```{r}
+lambda <- bc$x[which.max(bc$y)]
+lambda
+```
+
+```{r}
+Health_data$y <- ((Health_data$thalach)^lambda-1/lambda)
+NewModel <- lm(thalach ~ age + cp + trestbps + thal + chol + exang + slope + target,data=Health_data)
+summary(NewModel)
+```
+
+```{r}
+shapiro.test(NewModel$residuals)
+```
+We can say that since the p value is less than 0.05 the data is not normal.
+
+```{r}
+SampleData= sample_n(Health_data,5)
+predict(NewModel,SampleData)
+```
+Predicting the heart rate using the best model I have achieved so far
+
+
+
+
+ANOVA
+
+
+
+Null Hypothesis: 
+$H_0$:If there are any colored arteries floroscopy then one need to have same heart rate 
+Alternate Hypothesis: 
+$H_1$: All the colored arteries in floroscopy then one need not to have same heart rate 
+```{r}
+Health_data$sex <- Health_data$sex %>% factor(labels = c("Female","Male"))
+Health_data$New_ca=0
+Health_data$New_ca[Health_data$ca==0] ="Zero"
+Health_data$New_ca[Health_data$ca==1] ="One"
+Health_data$New_ca[Health_data$ca==2] ="Two"
+Health_data$New_ca[Health_data$ca==3] ="Three"
+Health_data$target <- as.logical(Health_data$target)
+Health_data$exang <- as.logical(Health_data$exang)
+colSums(is.na(Health_data))
+glimpse(Health_data)
+```
+
+
+```{r}
+sample_selector <- function(type){
+  select_data =Health_data %>% filter(ca==type)
+  return(sample_n(select_data,20))
+} #selects a random sample of size 20 of the same type given by the user
+```
+
+
+```{r}
+select_zero = sample_selector(0)
+select_one = sample_selector(1)
+select_two = sample_selector(2)
+select_three = sample_selector(3)
+selected_data = bind_rows(select_zero,select_one,select_two,select_three)
+dim(selected_data)
+```
+Checking for Normality:
+```{r}
+res_aov <- aov(thalach ~ New_ca,data = selected_data)
+summary(res_aov)
+```
+Normality thorough Graphs
+```{r}
+par(mfrow=c(1,2)) 
+hist(res_aov$residuals,main = "Histogram for Residuals",xlab = "Residuals")
+qqnorm(res_aov$residuals,xlab = "norm quantiles")
+```
+
+
+The residuals are normal. 
+```{r}
+shapiro.test(res_aov$residuals)
+```
+
+
+```{r}
+boxplot(thalach ~ New_ca, data=selected_data)
+```
+```{r}
+dotplot(thalach ~ New_ca, data=selected_data)
+```
+From these plots we can tell that there is variance among the New_ca.We can also see this statistically through LeveneTest.
+
+Testing Hypothesis for LeveneTest:
+
+$H_0$: Variances are equal
+$H_1$: at least one variance is different
+```{r}
+leveneTest(thalach ~ New_ca, data = selected_data)
+```
+Since the p value is greater than 0.05 we do not reject the null hypothesis
+
+
+```{r}
+par(mfrow=c(1,2))
+
+# 1. Homogeneity of variances
+plot(res_aov, which = 1)
+
+# 2. Normality
+plot(res_aov, which = 2)
+```
+
+
+```{r}
+Final <- TukeyHSD(res_aov)
+Final
+```
+
+```{r}
+plot(Final)
+```
+
+
+
+
+Performing ANOVA
+
+```{r}
+group_by(selected_data, New_ca) %>% 
+     summarise(
+            mean = mean(thalach,na.rm=TRUE),
+            sd = sd(thalach,na.rm=TRUE)
+            )
+```
+From here we can see that the mean for One is low and mean for Zero is high.
+
+Testing ANOVA
+```{r}
+oneway.test(thalach ~ New_ca,
+            data = selected_data,
+            var.equal = TRUE # assuming equl variances
+            )
+```
+```{r}
+anova2 <- aov(thalach ~ New_ca,
+               data = selected_data)
+summary(anova2)
+```
+From these two methods we can say the having equal variances results and conclusions do not change as these both methods obtained same p-value.
+
+Inference:
+
+- Since the obtained p-value is much smaller than 0.05 and, we reject the null hypothesis, so we reject the hypothesis that all means are equal.
+- We can conclude that **at least one dosage is different than the others in terms of length of cells** (p-value = 0.00109).
+
+
+Logistic Regression
+```{r}
+set.seed(42)
+index_health = sample(nrow(Health_data),212)
+TrainData = Health_data[index_health,] #dividing data into train and test data
+TestData = Health_data[-index_health,]
+head(TrainData)
+```
+
+
+TrainData
+```{r}
+train_lm = TrainData
+test_lm = TestData
+glimpse(train_lm)
+```
+Logistic Model
+```{r}
+regressionModel <- lm(target ~ sex+thalach+exang+cp+ca+thal,data = train_lm)
+summary(regressionModel)
+```
+
+```{r}
+all(predict(regressionModel) < 0.5)
+all(predict(regressionModel) < 0.3)
+all(predict(regressionModel) < 0.6)
+any(predict(regressionModel) < 0)
+```
+Best Logistic Model
+```{r}
+regressionModel2 <- glm(target ~ sex+cp+thalach+exang+ca+thal,data = train_lm,family = "binomial")
+summary(regressionModel2)
+```
+
+```{r}
+library(pscl)
+pscl::pR2(regressionModel2)["McFadden"]
+car::vif(regressionModel2)#tells about the predicting power
+```
+
+```{r}
+Pred <-  predict(regressionModel2,TrainData, type = "response") # default type = "link"
+PredTrain1 <- ifelse(Pred>0.05,TRUE,FALSE)
+PredTrain2 <- ifelse(Pred>0.07,TRUE,FALSE)
+PredTrain3 <- ifelse(Pred>0.03,TRUE,FALSE)
+
+```
+
+```{r}
+acc1 <- mean(TrainData$target==PredTrain1)
+acc3 <- mean(TrainData$target==PredTrain3)
+acc2 <- mean(TrainData$target==PredTrain2) #calculating accuracy
+acc1
+acc2
+acc3
+```
+Since acc2 is better we use PredTrain2
+
+```{r}
+PredictedModel1 = ifelse(predict(regressionModel2, type = "link") > 0.3, TRUE, FALSE)
+PredictedModel2 = ifelse(predict(regressionModel2, type = "link") > 0.5, TRUE, FALSE)
+PredictedModel3 = ifelse(predict(regressionModel2, type = "link") > 0.7, TRUE, FALSE)
+
+```
+
+
+```{r}
+test1 =  table(predicted = PredictedModel1,actual = train_lm$target)
+test2 =  table(predicted = PredictedModel2,actual = train_lm$target)
+test3 =  table(predicted = PredictedModel3,actual = train_lm$target)
+
+cm1=caret::confusionMatrix(test1,positive="TRUE")
+cm2=caret::confusionMatrix(test2,positive="TRUE")
+cm3=caret::confusionMatrix(test3,positive="TRUE")
+
+v1 = c(cm1$overall["Accuracy"],cm1$byClass["Sensitivity"],cm1$byClass["Specificity"])
+v2= c(cm2$overall["Accuracy"],cm2$byClass["Sensitivity"],cm2$byClass["Specificity"])
+v3=c(cm3$overall["Accuracy"],cm3$byClass["Sensitivity"],cm3$byClass["Specificity"])
+```
+
+```{r}
+metrics = rbind(v1,v2,v3)
+
+rownames(metrics) = c("c = 0.3", "c = 0.5", "c = 0.7")
+metrics
+```
+
+
+```{r}
+calc_accuracy = function(actual, predicted) {
+  mean(actual != predicted)
+}
+```
+
+```{r}
+calc_accuracy(actual = TrainData$target, predicted = PredictedModel1)
+```
+```{r}
+TrainingTable = table(predicted = PredictedModel1, actual = train_lm$target)
+TrainingTable
+```
+
+
+Confusion Matrix
+```{r}
+
+library(caret)
+confusion_matrix = caret::confusionMatrix(TrainingTable,positive="TRUE")
+c(confusion_matrix$overall["Accuracy"], 
+  confusion_matrix$byClass["Sensitivity"], 
+  confusion_matrix$byClass["Specificity"])
+```
+
+```{r}
+confusion_matrix
+```
+
+```{r}
+library(InformationValue)
+TrainCut <- optimalCutoff(TrainData$target,Pred)[1]
+TrainCut
+```
+
+
+Test Data
+```{r}
+PredictTest <-  predict(regressionModel2,TestData, type = "response")
+```
+
+
+
+
+```{r}
+probs <- predict(regressionModel2, newdata = TestData, type = "response")
+temp <- ifelse(probs > 0.49, "TRUE", "FALSE")
+TestTable = table(Predicted=temp,actual=TestData$target)
+
+```
+
+```{r}
+TestTable
+confusion_matrix2 = caret::confusionMatrix(TestTable,positive="TRUE")
+c(confusion_matrix2$overall["Accuracy"], 
+  confusion_matrix2$byClass["Sensitivity"], 
+  confusion_matrix2$byClass["Specificity"])
+```
+
+
+```{r}
+TestCut <- optimalCutoff(TestData$target,PredictTest)[1]
+TestCut
+```
+
+```{r}
+PredictTest <- ifelse(PredictTest>0.49, TRUE, FALSE)
+TestTable = table(Predicted=PredictTest, actual = TestData$target)
+TestTable
+```
+
+```{r}
+TestMatrix = caret::confusionMatrix(TestTable, positive="TRUE")
+TestMatrix
+```
+
+```{r}
+probs <- predict(regressionModel2, TestData, type = "response")
+final <- ifelse(probs > 0.4916232, "TRUE", "FALSE")
+
+tes =  table(predicted = final,actual = TestData$target)
+cm=caret::confusionMatrix(tes,positive="TRUE")
+verdict = c(cm$overall["Accuracy"],cm$byClass["Sensitivity"],cm$byClass["Specificity"])
+verdict
+```
+
