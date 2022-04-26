@@ -1,2 +1,2 @@
 # Heart-Data-Analysis
-This project showa in detain the EDA of the heart dataset and visualizing the plots in R. 
+This project shows in detail the Exploratory Data Analysis (EDA) of the heart dataset and visualizing the plots in R. 
